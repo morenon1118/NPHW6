@@ -1,0 +1,215 @@
+---
+title: "NP - HW6"
+author: "Nick Moreno"
+date: "4/12/2020"
+output: html_document
+---
+```{r}
+library(mice)
+library(readr)
+```
+
+1. Download this data: bit.ly/illschooldata.csv (Data set is from here:
+https://ww2.amstat.org/censusatschool/RandomSampleExport.cfm)
+
+• Describe the data. Who is in this data set? What are some of the intersting characteristics of this data set?
+```{r}
+school <- read.csv("/Users/Computer/Downloads/ill_school_data.csv")
+
+```
+
+This is a collection of information about Illinois high school students. The data is a mix of each student's demographics, results on various tests, and responses to questions regarding their preferences and lifestyle. 
+
+```{r}
+summary(school$Handed)
+summary(school$Favorite_Season)
+
+```
+
+
+• Perform the appropriate test to test the null hypothesis that handedness (i.e. the variable named Handed) is independent of favorite season vs the alternative hypothesis that there is some dependence. Perform this test after removing responses that are blank. Do you think it is ok here to remove the blanks? Explain why or why not. Explain your reasoning for the test you chose and state your conclusions.
+
+```{r}
+summary(school$Handed)
+summary(school$Favorite_Season)
+
+```
+So we have some missing values, let's take them out!
+
+```{r}
+#df w/ desired variables
+dat <- data.frame(school$Handed, school$Favorite_Season)
+
+#removing observations w/ missing values
+dat <- dat[!(dat$school.Handed == "" | dat$school.Favorite_Season == ""), ]
+
+#Hypothesis testing
+fisher.test(table(dat$school.Handed, dat$school.Favorite_Season))
+
+```
+It isn't okay in this setting to remove the blanks as it doesn't seem to be missing at random (MAR). I chose a fishers permutation test because there are some predictor variables that have n's < 5.
+
+
+• Build a simple linear regression model with height as your response and arm span as your predictor. First, you need to clean the data, then use MICE to impute missing values using a CART model. Estimate the simple linear regression model on each of the compeleted data sets and use Rubin’s combining rules to combined estiamtes across imputations. State your final estimates for each of the slope and intercept parameters as well as standard errors for each of these combined estimates.
+```{r}
+dat2 <- data.frame(school$Height_cm, school$Armspan_cm)
+table(dat2$school.Height_cm)
+
+```
+Well this sucks. Seems like we have 29 NA's, a variety of incorrect units in feet, maybe inches, and a few typos. Plus, we have labels on some. Let's deal with that first:
+
+```{r}
+#Mr. Clean
+dat2 <- dat2[order(dat2$school.Height_cm), ]
+
+#Height
+dat2$school.Height_cm <- as.character(dat2$school.Height_cm)
+dat2$school.Height_cm <- parse_number(dat2$school.Height_cm, na = "")
+
+#No clue what to do with obs < 13 and > 200, so let's make them missing values and impute later
+dat2$school.Height_cm <- as.numeric(dat2$school.Height_cm)
+
+for (i in 1:500){
+  if(is.na(dat2$school.Height_cm[[i]]) == "TRUE") {
+    dat2$school.Height_cm[[i]] <- dat2$school.Height_cm[[i]]
+  } else {
+    if(dat2$school.Height_cm[[i]] < 27 | dat2$school.Height_cm[[i]] > 201){
+      dat2$school.Height_cm[[i]] <- NA
+    }
+  }
+}
+
+#Also let's make the 98.0 height NA:
+dat2$school.Height_cm[[498]] <- NA
+
+#Now let's convert inches to cm:
+
+for (i in 1:500){
+  if(is.na(dat2$school.Height_cm[[i]]) == "TRUE") {
+    dat2$school.Height_cm[[i]] <- dat2$school.Height_cm[[i]]
+  } else {
+    if(dat2$school.Height_cm[[i]] <  81 & dat2$school.Height_cm[[i]] > 53){
+      dat2$school.Height_cm[[i]] <- dat2$school.Height_cm[[i]] * 2.54   
+    }
+  }
+}
+
+#Dope. Now Armspan:
+dat2$school.Armspan_cm <- as.character(dat2$school.Armspan_cm)
+dat2$school.Armspan_cm <- parse_number(dat2$school.Armspan_cm, na = "")
+
+#No clue what to do with obs < 13 and > 200, so let's make them missing values and impute later
+dat2$school.Armspan_cm <- as.numeric(dat2$school.Armspan_cm)
+
+for (i in 1:500){
+  if(is.na(dat2$school.Armspan_cm[[i]]) == "TRUE") {
+    dat2$school.Armspan_cm[[i]] <- dat2$school.Armspan_cm[[i]]
+  } else {
+    if(dat2$school.Armspan_cm[[i]] < 27 | dat2$school.Armspan_cm[[i]] > 201){
+      dat2$school.Armspan_cm[[i]] <- NA
+    }
+  }
+}
+
+#Also let's make the 98.0 height NA:
+dat2$school.Armspan_cm[[498]] <- NA
+
+#Now let's convert inches to cm:
+
+for (i in 1:500){
+  if(is.na(dat2$school.Armspan_cm[[i]]) == "TRUE") {
+    dat2$school.Armspan_cm[[i]] <- dat2$school.Armspan_cm[[i]]
+  } else {
+    if(dat2$school.Armspan_cm[[i]] <  81 & dat2$school.Armspan_cm[[i]] > 53){
+      dat2$school.Armspan_cm[[i]] <- dat2$school.Armspan_cm[[i]] * 2.54   
+    }
+  }
+}
+
+#Seems fine, except there are values within the range 30 < armspan < 102, which seem like
+#half of the wingpsan in either inches or cms. Let's convert and double:
+
+for (i in 1:500){
+  if(is.na(dat2$school.Armspan_cm[[i]]) == "TRUE") {
+    dat2$school.Armspan_cm[[i]] <- dat2$school.Armspan_cm[[i]]
+  } else {
+    if(dat2$school.Armspan_cm[[i]] <  103 & dat2$school.Armspan_cm[[i]] > 29){
+      dat2$school.Armspan_cm[[i]] <- dat2$school.Armspan_cm[[i]] * 2   
+    }
+  }
+}
+
+
+#Nice. 
+```
+
+Now, let's impute using MICE() and make our datasets:
+```{r}
+imp.dat2 <- mice(dat2, m = 5, method = 'cart')
+
+impDatList <- list()
+impDatList[[1]]<-complete(imp.dat2)
+impDatList[[2]]<-complete(imp.dat2,2)
+impDatList[[3]]<-complete(imp.dat2,3)
+impDatList[[4]]<-complete(imp.dat2,4)
+impDatList[[5]]<-complete(imp.dat2,5)
+```
+
+
+And now for the model:
+```{r}
+#List of betas
+betaList<-seList<-list()
+for (i in 1:5){
+betaList[[i]]<-summary(lm(school.Height_cm ~ school.Armspan_cm,data=as.data.frame(impDatList[[i]])))$coefficients[,1]
+seList[[i]]<-summary(lm(school.Height_cm ~ school.Armspan_cm,data=as.data.frame(impDatList[[i]])))$coefficients[,2]
+}
+
+#Ruben's
+M <- 5
+apply(do.call(rbind,betaList),2,mean)
+(B<-apply(do.call(rbind,betaList),2,var))
+(W<-apply(do.call(rbind,seList)^2,2,mean))
+T<-(1+1/M)*B + W
+#Std error
+sqrt(T)
+
+
+```
+
+• Repeat the previous problem, but use a random forest for imputation in MICE instead of a cart model.
+```{r}
+imp.dat2 <- mice(dat2, m = 5, method = 'rf')
+
+impDatList <- list()
+impDatList[[1]]<-complete(imp.dat2)
+impDatList[[2]]<-complete(imp.dat2,2)
+impDatList[[3]]<-complete(imp.dat2,3)
+impDatList[[4]]<-complete(imp.dat2,4)
+impDatList[[5]]<-complete(imp.dat2,5)
+```
+
+
+And now for the model:
+```{r}
+#List of betas
+betaList<-seList<-list()
+for (i in 1:5){
+betaList[[i]]<-summary(lm(school.Height_cm ~ school.Armspan_cm,data=as.data.frame(impDatList[[i]])))$coefficients[,1]
+seList[[i]]<-summary(lm(school.Height_cm ~ school.Armspan_cm,data=as.data.frame(impDatList[[i]])))$coefficients[,2]
+}
+
+#Ruben's
+M <- 5
+apply(do.call(rbind,betaList),2,mean)
+(B<-apply(do.call(rbind,betaList),2,var))
+(W<-apply(do.call(rbind,seList)^2,2,mean))
+T<-(1+1/M)*B + W
+#Std error
+sqrt(T)
+
+
+```
+
+• Finally, put your code and results in a github repository. In the final version of your homework that you submit to Sakai, the answer to this part will simply be a link to that github repository.
+
