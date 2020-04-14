@@ -213,3 +213,5 @@ sqrt(T)
 
 • Finally, put your code and results in a github repository. In the final version of your homework that you submit to Sakai, the answer to this part will simply be a link to that github repository.
 
+https://github.com/morenon1118/NPHW6
+
